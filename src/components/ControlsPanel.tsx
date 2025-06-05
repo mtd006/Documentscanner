@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -15,6 +16,7 @@ import {
   Share2,
   Loader2,
   Eye,
+  Upload, // Added Upload icon
 } from "lucide-react";
 import {
   Select,
@@ -26,7 +28,8 @@ import {
 import type { AssessOcrQualityOutput } from "@/ai/flows/scan-mobile-assess-ocr";
 
 interface ControlsPanelProps {
-  onScanClick: () => void;
+  onOpenCameraClick: () => void; // Changed from onScanClick
+  onUploadFileClick: () => void; // New prop
   onEdgeDetection: () => void;
   onPerspectiveCorrection: () => void;
   onApplyFilter: (filter: string) => void;
@@ -40,7 +43,8 @@ interface ControlsPanelProps {
 }
 
 export function ControlsPanel({
-  onScanClick,
+  onOpenCameraClick,
+  onUploadFileClick,
   onEdgeDetection,
   onPerspectiveCorrection,
   onApplyFilter,
@@ -58,9 +62,14 @@ export function ControlsPanel({
         <CardTitle className="text-xl font-headline text-center">Scan & Edit</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button onClick={onScanClick} className="w-full" variant="default" size="lg">
-          <Camera className="mr-2 h-5 w-5" /> Scan Document
-        </Button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Button onClick={onOpenCameraClick} variant="default" size="lg">
+            <Camera className="mr-2 h-5 w-5" /> Scan with Camera
+          </Button>
+          <Button onClick={onUploadFileClick} variant="outline" size="lg">
+            <Upload className="mr-2 h-5 w-5" /> Upload Image File
+          </Button>
+        </div>
 
         <Separator />
 
@@ -113,7 +122,7 @@ export function ControlsPanel({
             className="w-full"
             disabled={!isImageLoaded || isLoading}
           >
-            {isLoading ? (
+            {isLoading && ocrAssessmentResult === null ? ( // Show loader only when assessing
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Eye className="mr-2 h-4 w-4" />
@@ -131,9 +140,9 @@ export function ControlsPanel({
             onClick={onRunOcr}
             variant="default"
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-            disabled={!isImageLoaded || isLoading || (ocrAssessmentResult && !ocrAssessmentResult.willOcrBeSuccessful)}
+            disabled={!isImageLoaded || isLoading || (ocrAssessmentResult && !ocrAssessmentResult.willOcrBeSuccessful && ocrResultText === "")} // Allow re-run if text is empty
           >
-            {isLoading ? (
+            {isLoading && ocrResultText === "" ? ( // Show loader only when running OCR
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <FileText className="mr-2 h-4 w-4" />

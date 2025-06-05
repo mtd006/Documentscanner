@@ -1,8 +1,9 @@
+
 // @ts-nocheck
 // TODO: Fix TS errors
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { AppHeader } from "@/components/AppHeader";
 import { ImageDisplay } from "@/components/ImageDisplay";
 import { ControlsPanel } from "@/components/ControlsPanel";
@@ -13,6 +14,10 @@ import { useToast } from "@/hooks/use-toast";
 import { performOcrAssessmentAction, performOcrAction } from "./actions";
 import type { AssessOcrQualityOutput } from "@/ai/flows/scan-mobile-assess-ocr";
 import type { ScanMobileOCROutput } from "@/ai/flows/scan-mobile-ocr";
+import { Button } from "@/components/ui/button";
+import { Camera } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 export default function ScanMobilePage() {
   const [scannedImage, setScannedImage] = useState<string | null>(null);
@@ -25,10 +30,47 @@ export default function ScanMobilePage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
 
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [showCameraView, setShowCameraView] = useState<boolean>(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
-  // Effect to reset OCR assessment when image changes
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast({
+          variant: 'destructive',
+          title: 'Camera Not Supported',
+          description: 'Your browser does not support camera access.',
+        });
+        setHasCameraPermission(false);
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        setHasCameraPermission(true);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        // Toast is shown when user tries to open camera if permission is false
+      }
+    };
+    getCameraPermission();
+
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [toast]);
+
   useEffect(() => {
     setOcrAssessmentResult(null);
   }, [scannedImage]);
@@ -47,7 +89,8 @@ export default function ScanMobilePage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setScannedImage(reader.result as string);
-        setAppliedFilter("original"); // Reset filter on new image
+        setAppliedFilter("original");
+        setShowCameraView(false); 
         toast({ title: "Image Loaded", description: "Your document is ready for processing." });
       };
       reader.onerror = () => {
@@ -61,7 +104,97 @@ export default function ScanMobilePage() {
     }
   };
 
-  const handleScanClick = () => {
+  const handleOpenCamera = () => {
+    if (hasCameraPermission === true) {
+      setScannedImage(null);
+      setAppliedFilter("original");
+      setOcrAssessmentResult(null);
+      setShowCameraView(true);
+      if (videoRef.current) {
+        videoRef.current.play().catch(err => {
+          console.error("Error playing video:", err);
+          toast({ variant: "destructive", title: "Camera Error", description: "Could not start camera preview."});
+        });
+      }
+    } else if (hasCameraPermission === false) {
+      toast({
+        variant: "destructive",
+        title: "Camera Access Required",
+        description: "Camera permission was denied or is not available. Please check your browser settings or use file upload.",
+      });
+    } else {
+       toast({
+        title: "Camera Initializing",
+        description: "Attempting to access camera. Please wait or check permissions.",
+      });
+    }
+  };
+
+  const handleCaptureImage = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      const videoWidth = video.videoWidth || video.clientWidth;
+      const videoHeight = video.videoHeight || video.clientHeight;
+
+      if (videoWidth === 0 || videoHeight === 0 || !video.srcObject || !(video.srcObject as MediaStream).active) {
+          toast({ variant: "destructive", title: "Capture Error", description: "Video stream not ready or inactive." });
+          // Attempt to stop tracks if stream is not active but srcObject exists
+          if (video.srcObject) {
+            (video.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+          }
+          // Optionally try to re-initialize camera or guide user
+          setHasCameraPermission(null); // Reset permission state to trigger re-check or guide
+          setShowCameraView(false);
+          // Re-run permission check or guide user
+           const getCameraPermissionAgain = async () => {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { return; }
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    setHasCameraPermission(true);
+                    if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+                    setShowCameraView(true); // Try to show camera view again
+                } catch (e) { setHasCameraPermission(false); }
+            };
+            getCameraPermissionAgain();
+          return;
+      }
+
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
+      
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setScannedImage(dataUrl);
+        setAppliedFilter("original");
+        setShowCameraView(false);
+        toast({ title: "Image Captured", description: "Your document is ready for processing." });
+        // Stop video tracks after capture
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            // Setting srcObject to null is important for some browsers to release camera
+            videoRef.current.srcObject = null; 
+        }
+
+      } else {
+         toast({ variant: "destructive", title: "Capture Error", description: "Could not get canvas context." });
+      }
+    } else {
+       toast({ variant: "destructive", title: "Capture Error", description: "Camera or canvas not ready." });
+    }
+  };
+  
+  const handleUploadFileClick = () => {
+    setShowCameraView(false);
+    if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+    }
     fileInputRef.current?.click();
   };
 
@@ -76,7 +209,7 @@ export default function ScanMobilePage() {
   const handleApplyFilter = (filter: string) => {
     if (filter === "enhance") {
        toast({ title: "Feature Info", description: "Color enhancement filter coming soon!" });
-       setAppliedFilter("original"); // fallback to original if enhance is selected
+       setAppliedFilter("original"); 
        return;
     }
     setAppliedFilter(filter);
@@ -85,7 +218,7 @@ export default function ScanMobilePage() {
 
   const handleAssessOcr = async () => {
     if (!scannedImage) {
-      toast({ variant: "destructive", title: "No Image", description: "Please scan a document first." });
+      toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
       return;
     }
     setIsLoading(true);
@@ -103,7 +236,7 @@ export default function ScanMobilePage() {
 
   const handleRunOcr = async () => {
     if (!scannedImage) {
-      toast({ variant: "destructive", title: "No Image", description: "Please scan a document first." });
+      toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
       return;
     }
     setIsLoading(true);
@@ -116,7 +249,7 @@ export default function ScanMobilePage() {
       } else {
         toast({ title: "OCR Information", description: result.text || "Could not extract text or document not convertible." });
         setOcrResultText(result.text || "No text extracted or document not convertible.");
-        setShowOcrModal(true); // Show modal even if empty to inform user
+        setShowOcrModal(true);
       }
     } catch (error) {
       toast({ variant: "destructive", title: "OCR Error", description: (error as Error).message });
@@ -127,7 +260,7 @@ export default function ScanMobilePage() {
 
   const handleSave = () => {
     if (!scannedImage) {
-      toast({ variant: "destructive", title: "No Image", description: "Please scan a document first." });
+      toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
       return;
     }
     setShowSaveModal(true);
@@ -135,30 +268,71 @@ export default function ScanMobilePage() {
 
   const handleShare = () => {
      if (!scannedImage) {
-      toast({ variant: "destructive", title: "No Image", description: "Please scan a document first." });
+      toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
       return;
     }
     setShowShareModal(true);
   };
+  
+  const handleCloseCamera = () => {
+    setShowCameraView(false);
+    if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <AppHeader />
       <main className="flex-grow container mx-auto p-4 sm:p-6 flex flex-col items-center gap-6">
-        <ImageDisplay imageUrl={scannedImage} appliedFilter={appliedFilter} />
-        <ControlsPanel
-          onScanClick={handleScanClick}
-          onEdgeDetection={handleEdgeDetection}
-          onPerspectiveCorrection={handlePerspectiveCorrection}
-          onApplyFilter={handleApplyFilter}
-          onAssessOcr={handleAssessOcr}
-          onRunOcr={handleRunOcr}
-          onSave={handleSave}
-          onShare={handleShare}
-          isImageLoaded={!!scannedImage}
-          isLoading={isLoading}
-          ocrAssessmentResult={ocrAssessmentResult}
-        />
+        <canvas ref={canvasRef} className="hidden"></canvas>
+        
+        {showCameraView ? (
+          <>
+            <div className="w-full max-w-md aspect-[3/4] bg-muted rounded-lg shadow-lg overflow-hidden flex flex-col items-center justify-center border border-border">
+              <video ref={videoRef} className="w-full h-full object-contain" autoPlay playsInline muted />
+            </div>
+            {hasCameraPermission === false && (
+              <Alert variant="destructive" className="w-full max-w-md">
+                <AlertTitle>Camera Access Denied</AlertTitle>
+                <AlertDescription>
+                  Camera permission was denied or is unavailable. Please check browser settings. You can use file upload instead.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full max-w-md">
+              <Button onClick={handleCaptureImage} className="flex-1" disabled={!hasCameraPermission || isLoading}>
+                <Camera className="mr-2 h-5 w-5" /> Capture Image
+              </Button>
+              <Button onClick={handleCloseCamera} variant="outline" className="flex-1">
+                Cancel
+              </Button>
+            </div>
+            <Button onClick={handleUploadFileClick} variant="link" className="mt-2">
+                Or Upload an Image File
+            </Button>
+          </>
+        ) : (
+          <>
+            <ImageDisplay imageUrl={scannedImage} appliedFilter={appliedFilter} />
+            <ControlsPanel
+              onOpenCameraClick={handleOpenCamera}
+              onUploadFileClick={handleUploadFileClick}
+              onEdgeDetection={handleEdgeDetection}
+              onPerspectiveCorrection={handlePerspectiveCorrection}
+              onApplyFilter={handleApplyFilter}
+              onAssessOcr={handleAssessOcr}
+              onRunOcr={handleRunOcr}
+              onSave={handleSave}
+              onShare={handleShare}
+              isImageLoaded={!!scannedImage}
+              isLoading={isLoading}
+              ocrAssessmentResult={ocrAssessmentResult}
+            />
+          </>
+        )}
         <input
           type="file"
           ref={fileInputRef}
