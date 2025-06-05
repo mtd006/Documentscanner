@@ -16,7 +16,7 @@ import {
   Share2,
   Loader2,
   Eye,
-  Upload, // Added Upload icon
+  Upload,
 } from "lucide-react";
 import {
   Select,
@@ -28,8 +28,8 @@ import {
 import type { AssessOcrQualityOutput } from "@/ai/flows/scan-mobile-assess-ocr";
 
 interface ControlsPanelProps {
-  onOpenCameraClick: () => void; // Changed from onScanClick
-  onUploadFileClick: () => void; // New prop
+  onOpenCameraClick: () => void;
+  onUploadFileClick: () => void;
   onEdgeDetection: () => void;
   onPerspectiveCorrection: () => void;
   onApplyFilter: (filter: string) => void;
@@ -40,6 +40,7 @@ interface ControlsPanelProps {
   isImageLoaded: boolean;
   isLoading: boolean;
   ocrAssessmentResult: AssessOcrQualityOutput | null;
+  ocrResultTextForDisabledCheck: string; // Added for checking OCR run state
 }
 
 export function ControlsPanel({
@@ -55,7 +56,21 @@ export function ControlsPanel({
   isImageLoaded,
   isLoading,
   ocrAssessmentResult,
+  ocrResultTextForDisabledCheck, // Destructure new prop
 }: ControlsPanelProps) {
+  // Determine if OCR is currently running (for loader display on OCR button)
+  const isOcrRunning = isLoading && ocrResultTextForDisabledCheck === "" && ocrAssessmentResult === null; // More specific: loading, no text yet, and no prior assessment blocking it
+  const isAssessmentRunning = isLoading && ocrAssessmentResult === null;
+
+
+  // Disable OCR run button if assessment failed and no text has been extracted yet from a previous attempt
+  // Or if currently loading, or no image
+  const disableRunOcrButton = 
+    !isImageLoaded || 
+    isLoading || 
+    (ocrAssessmentResult !== null && !ocrAssessmentResult.willOcrBeSuccessful && ocrResultTextForDisabledCheck === "");
+
+
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader>
@@ -63,10 +78,10 @@ export function ControlsPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Button onClick={onOpenCameraClick} variant="default" size="lg">
+          <Button onClick={onOpenCameraClick} variant="default" size="lg" disabled={isLoading}>
             <Camera className="mr-2 h-5 w-5" /> Scan with Camera
           </Button>
-          <Button onClick={onUploadFileClick} variant="outline" size="lg">
+          <Button onClick={onUploadFileClick} variant="outline" size="lg" disabled={isLoading}>
             <Upload className="mr-2 h-5 w-5" /> Upload Image File
           </Button>
         </div>
@@ -122,7 +137,7 @@ export function ControlsPanel({
             className="w-full"
             disabled={!isImageLoaded || isLoading}
           >
-            {isLoading && ocrAssessmentResult === null ? ( // Show loader only when assessing
+            {isAssessmentRunning ? ( 
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Eye className="mr-2 h-4 w-4" />
@@ -140,9 +155,9 @@ export function ControlsPanel({
             onClick={onRunOcr}
             variant="default"
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-            disabled={!isImageLoaded || isLoading || (ocrAssessmentResult && !ocrAssessmentResult.willOcrBeSuccessful && ocrResultText === "")} // Allow re-run if text is empty
+            disabled={disableRunOcrButton}
           >
-            {isLoading && ocrResultText === "" ? ( // Show loader only when running OCR
+            {isOcrRunning ? ( 
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <FileText className="mr-2 h-4 w-4" />

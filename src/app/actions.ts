@@ -1,5 +1,4 @@
-// @ts-nocheck
-// TODO: Fix TS errors
+
 "use server";
 
 import { assessOcrQuality, AssessOcrQualityInput, AssessOcrQualityOutput } from "@/ai/flows/scan-mobile-assess-ocr";
@@ -9,9 +8,12 @@ export async function performOcrAssessmentAction(input: AssessOcrQualityInput): 
   try {
     const result = await assessOcrQuality(input);
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error in performOcrAssessmentAction:", error);
-    throw new Error("Failed to assess OCR quality.");
+    if (error instanceof Error) {
+        throw new Error(`Failed to assess OCR quality: ${error.message}`);
+    }
+    throw new Error("Failed to assess OCR quality due to an unknown error.");
   }
 }
 
@@ -19,8 +21,11 @@ export async function performOcrAction(input: ScanMobileOCRInput): Promise<ScanM
   try {
     const result = await scanMobileOCR(input);
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error in performOcrAction:", error);
-    throw new Error("Failed to perform OCR.");
+    if (error instanceof Error) {
+        throw new Error(`Failed to perform OCR: ${error.message}`);
+    }
+    throw new Error("Failed to perform OCR due to an unknown error.");
   }
 }
