@@ -48,15 +48,29 @@ const ScanMobilePage: React.FC = () => {
         return;
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        // We request permission here but don't start the stream if camera view isn't active.
+        // The stream will be properly started in handleOpenCamera.
+        // This effect primarily sets hasCameraPermission.
+        await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         setHasCameraPermission(true);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+        // Stop tracks immediately as we only wanted to check permission, not keep stream active yet.
+        // The actual stream will be started in handleOpenCamera.
+        // This prevents camera light staying on if user doesn't click "Open Camera".
+        try {
+            const tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            tempStream.getTracks().forEach(track => track.stop());
+            setHasCameraPermission(true);
+        } catch (permError) {
+             // This inner catch is if the re-check for stopping fails, outer catch handles initial denial.
+            console.error('Error getting temp stream for stopping tracks:', permError);
+            setHasCameraPermission(false); // Assume permission issue if we can't even get it to stop.
         }
+
+
       } catch (error: unknown) {
-        console.error('Error accessing camera:', error);
+        console.error('Error accessing camera initially:', error);
         setHasCameraPermission(false);
-        // Toast is shown when user tries to open camera if permission is false
+        // Toast is shown when user tries to open camera if permission is false (in handleOpenCamera)
       }
     };
     getCameraPermission();
@@ -68,7 +82,7 @@ const ScanMobilePage: React.FC = () => {
         videoRef.current.srcObject = null; 
       }
     };
-  }, [toast]);
+  }, [toast]); // Removed videoRef from dependencies as it caused re-runs affecting stream state
 
   useEffect(() => {
     setOcrAssessmentResult(null);
@@ -111,24 +125,33 @@ const ScanMobilePage: React.FC = () => {
       setOcrAssessmentResult(null);
       setOcrResultText("");
       setShowCameraView(true);
-      if (videoRef.current) {
-        // Request camera again to ensure the stream is fresh if previously stopped
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-          .then(stream => {
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.play().catch(err => {
-                console.error("Error playing video:", err);
-                toast({ variant: "destructive", title: "Camera Error", description: "Could not start camera preview."});
-              });
-            }
-          })
-          .catch(err => {
-            console.error("Error re-accessing camera:", err);
-            setHasCameraPermission(false); // Update permission state
-            toast({ variant: "destructive", title: "Camera Error", description: "Could not access camera. Please check permissions."});
-          });
-      }
+      // Delay slightly to ensure videoRef is available after setShowCameraView re-render
+      setTimeout(() => {
+        if (videoRef.current) {
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => {
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.play().catch(err => {
+                  console.error("Error playing video:", err);
+                  toast({ variant: "destructive", title: "Camera Error", description: "Could not start camera preview."});
+                });
+              } else {
+                 // This case should ideally not happen if setTimeout works
+                 console.warn("videoRef.current became null after setShowCameraView(true) and timeout.")
+              }
+            })
+            .catch(err => {
+              console.error("Error re-accessing camera:", err);
+              setHasCameraPermission(false); 
+              toast({ variant: "destructive", title: "Camera Error", description: "Could not access camera. Please check permissions."});
+            });
+        } else {
+             console.warn("videoRef.current is null in handleOpenCamera after setShowCameraView(true). This might indicate a timing issue.");
+             toast({ variant: "destructive", title: "Camera Init Error", description: "Camera component not ready. Please try again."});
+             setShowCameraView(false); // Revert if videoRef not found
+        }
+      }, 0); // Small delay can help ensure DOM update
     } else if (hasCameraPermission === false) {
       toast({
         variant: "destructive",
@@ -160,7 +183,6 @@ const ScanMobilePage: React.FC = () => {
           if (videoRef.current) {
               videoRef.current.srcObject = null; 
           }
-          // Don't reset hasCameraPermission here, let user re-initiate via open camera button
           setShowCameraView(false); 
           return;
       }
@@ -225,7 +247,7 @@ const ScanMobilePage: React.FC = () => {
       return;
     }
     setIsLoading(true);
-    setOcrAssessmentResult(null); // Reset previous assessment
+    setOcrAssessmentResult(null); 
     try {
       const assessment = await performOcrAssessmentAction({ photoDataUri: scannedImage });
       setOcrAssessmentResult(assessment);
@@ -243,7 +265,7 @@ const ScanMobilePage: React.FC = () => {
       return;
     }
     setIsLoading(true);
-    setOcrResultText(""); // Clear previous OCR text
+    setOcrResultText(""); 
     try {
       const result: ScanMobileOCROutput = await performOcrAction({ photoDataUri: scannedImage });
       if (result.isConvertible && result.text) {
@@ -296,11 +318,22 @@ const ScanMobilePage: React.FC = () => {
         
         {showCameraView ? (
           <>
-            <div className="w-full max-w-md aspect-[3/4] bg-muted rounded-lg shadow-lg overflow-hidden flex flex-col items-center justify-center border border-border">
-              {/* Always render video tag to keep ref. Control visibility/stream via CSS or parent state */}
-              <video ref={videoRef} className={cn("w-full h-full object-contain", { 'hidden': !hasCameraPermission })} autoPlay playsInline muted />
-              {hasCameraPermission === null && <p className="text-muted-foreground">Initializing camera...</p>}
+            <div className="relative w-full max-w-md aspect-[3/4] bg-muted rounded-lg shadow-lg overflow-hidden flex flex-col items-center justify-center border border-border">
+              {/* Video tag is always rendered when showCameraView is true */}
+              <video 
+                ref={videoRef} 
+                className="w-full h-full object-contain" // Removed conditional hiding based on hasCameraPermission
+                autoPlay 
+                playsInline 
+                muted 
+              />
+              {hasCameraPermission === null && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <p className="text-white p-4 bg-black/50 rounded-md">Initializing camera...</p>
+                </div>
+              )}
             </div>
+            {/* Alert for permission explicitly denied is shown below the video area */}
             {hasCameraPermission === false && (
               <Alert variant="destructive" className="w-full max-w-md">
                 <AlertTitle>Camera Access Denied</AlertTitle>
