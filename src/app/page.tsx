@@ -100,6 +100,11 @@ const ScanMobilePage: React.FC = () => {
           stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
           if (videoRef.current) { 
             videoRef.current.srcObject = stream;
+            // Ensure video plays, catch potential errors
+             videoRef.current.play().catch(err => {
+                console.error("Error playing video:", err);
+                toast({ variant: "destructive", title: "Camera Error", description: "Could not start camera preview."});
+             });
           }
         } catch (err) {
           console.error("Error starting camera stream:", err);
@@ -136,7 +141,7 @@ const ScanMobilePage: React.FC = () => {
   const addImageToScans = useCallback((imageDataUrl: string) => {
     setScannedImages(prevScannedImgs => {
       const newScannedImgs = [...prevScannedImgs, imageDataUrl];
-      setCurrentImageIndex(prevScannedImgs.length); 
+      setCurrentImageIndex(newScannedImgs.length - 1); 
       return newScannedImgs;
     });
     setAppliedFilter("original");
@@ -231,6 +236,13 @@ const ScanMobilePage: React.FC = () => {
         const dataUrl = canvas.toDataURL('image/jpeg');
         addImageToScans(dataUrl);
         toast({ title: "Image Captured & Added", description: "New page added to your document. Camera remains active." });
+        // setShowCameraView(false); // Removed to keep camera active
+        // if (currentStream) { // Removed to keep stream active
+        //     currentStream.getTracks().forEach(track => track.stop());
+        // }
+        // if (videoRef.current) { // Removed to keep stream active
+        //     videoRef.current.srcObject = null; 
+        // }
       } else {
          toast({ variant: "destructive", title: "Capture Error", description: "Could not get canvas context." });
          setShowCameraView(false); 
@@ -334,6 +346,7 @@ const ScanMobilePage: React.FC = () => {
   
   const handleCloseCamera = () => {
     setShowCameraView(false); 
+    // The useEffect for showCameraView will handle stopping the stream tracks
   };
 
   const handleNextImage = () => {
@@ -384,7 +397,7 @@ const ScanMobilePage: React.FC = () => {
     setAppliedFilter("original");
     setOcrAssessmentResult(null);
     setOcrResultText("");
-    setShowCameraView(false); // Close camera if open
+    setShowCameraView(false); 
     toast({ title: "New Scan Started", description: "All previous pages have been cleared." });
   };
 
@@ -419,12 +432,19 @@ const ScanMobilePage: React.FC = () => {
                 </AlertDescription>
               </Alert>
             )}
-            <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full max-w-md">
+            
+            {scannedImages.length > 0 && (
+              <p className="text-sm text-muted-foreground mt-4">
+                Pages in document: {scannedImages.length}
+              </p>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2 mt-2 w-full max-w-md">
               <Button onClick={handleCaptureImage} className="flex-1" disabled={hasCameraPermission !== true || isLoading}>
                 <Camera className="mr-2 h-5 w-5" /> Capture & Add Page
               </Button>
               <Button onClick={handleCloseCamera} variant="outline" className="flex-1">
-                Cancel
+                {scannedImages.length > 0 && showCameraView ? "Done & View Pages" : "Cancel Camera"}
               </Button>
             </div>
             <Button onClick={handleUploadFileClick} variant="link" className="mt-2">
@@ -465,7 +485,7 @@ const ScanMobilePage: React.FC = () => {
           type="file"
           ref={fileInputRef}
           onChange={handleFileChange}
-          accept="image/*"
+          accept="image/*" // Removed multiple attribute
           className="hidden"
         />
       </main>
@@ -496,3 +516,4 @@ export default ScanMobilePage;
     
 
     
+
