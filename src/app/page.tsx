@@ -99,9 +99,13 @@ const ScanMobilePage: React.FC = () => {
 
 
   const addImageToScans = (imageDataUrl: string) => {
-    setScannedImages(prevImages => [...prevImages, imageDataUrl]);
-    setCurrentImageIndex(prevImages => prevImages.length); 
-    setAppliedFilter("original"); 
+    setScannedImages(prevScannedImgs => {
+      const newScannedImgs = [...prevScannedImgs, imageDataUrl];
+      // The index of the newly added image is the length of the *previous* array.
+      setCurrentImageIndex(prevScannedImgs.length);
+      return newScannedImgs;
+    });
+    setAppliedFilter("original");
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -345,19 +349,25 @@ const ScanMobilePage: React.FC = () => {
   };
 
   const handleDeleteCurrentImage = () => {
-    if (currentImageIndex === -1 || scannedImages.length === 0) return;
+    if (currentImageIndex === -1 || scannedImages.length === 0) {
+      return;
+    }
 
-    setScannedImages(prevImages => {
-      const newImages = [...prevImages];
-      newImages.splice(currentImageIndex, 1);
-      return newImages;
-    });
-    
-    setCurrentImageIndex(prevIdx => {
-        const newLength = scannedImages.length - 1;
-        if (newLength === 0) return -1;
-        if (prevIdx >= newLength) return newLength - 1;
-        return prevIdx;
+    const indexBeingDeleted = currentImageIndex;
+
+    setScannedImages(prevScannedImages => {
+      const newImagesArray = prevScannedImages.filter((_, idx) => idx !== indexBeingDeleted);
+
+      if (newImagesArray.length === 0) {
+        setCurrentImageIndex(-1);
+      } else {
+        if (indexBeingDeleted >= newImagesArray.length) {
+          setCurrentImageIndex(newImagesArray.length - 1);
+        } else {
+          setCurrentImageIndex(indexBeingDeleted);
+        }
+      }
+      return newImagesArray;
     });
 
     toast({ title: "Page Deleted", description: "The current page has been removed." });
@@ -464,3 +474,5 @@ const ScanMobilePage: React.FC = () => {
 }
 
 export default ScanMobilePage;
+
+    
