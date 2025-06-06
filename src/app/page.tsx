@@ -83,7 +83,6 @@ const ScanMobilePage: React.FC = () => {
 
     return () => {
       isMounted = false;
-      // Ensure video stream is stopped if component unmounts while camera view is active
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -120,7 +119,6 @@ const ScanMobilePage: React.FC = () => {
         stream.getTracks().forEach(track => track.stop());
       }
       if (videoRef.current && videoRef.current.srcObject) {
-        // This check is important to avoid errors if srcObject is already null
         const currentActiveStream = videoRef.current.srcObject as MediaStream;
         currentActiveStream.getTracks().forEach(track => track.stop());
         videoRef.current.srcObject = null;
@@ -190,13 +188,12 @@ const ScanMobilePage: React.FC = () => {
         title: "Checking Camera...",
         description: "Attempting to access camera. Please wait or respond to any permission prompts.",
       });
-       // Attempt to re-trigger permission check if initial was null or failed silently
        const reCheckPerms = async () => {
         try {
           const tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
           setHasCameraPermission(true);
           setShowCameraView(true); 
-          tempStream.getTracks().forEach(track => track.stop()); // stop tracks immediately after check
+          tempStream.getTracks().forEach(track => track.stop()); 
         } catch (error) {
           setHasCameraPermission(false);
           toast({
@@ -233,15 +230,7 @@ const ScanMobilePage: React.FC = () => {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg');
         addImageToScans(dataUrl);
-        toast({ title: "Image Captured & Added", description: "New page added to your document." });
-        // Keep camera view open:
-        // setShowCameraView(false); // Removed
-        // if (currentStream) { // Removed stream stopping logic here
-        //   currentStream.getTracks().forEach(track => track.stop());
-        // }
-        // if (videoRef.current) { // Removed
-        //   videoRef.current.srcObject = null;
-        // }
+        toast({ title: "Image Captured & Added", description: "New page added to your document. Camera remains active." });
       } else {
          toast({ variant: "destructive", title: "Capture Error", description: "Could not get canvas context." });
          setShowCameraView(false); 
@@ -336,7 +325,7 @@ const ScanMobilePage: React.FC = () => {
   };
 
   const handleShare = () => {
-     if (!currentImageUrl) { // Still operates on current image for link/email, but modal text will guide for all.
+     if (!currentImageUrl) { 
       toast({ variant: "destructive", title: "No Page Selected", description: "Please select or scan a page to share its link/email, or save all pages as PDF to share the document." });
       return;
     }
@@ -345,8 +334,7 @@ const ScanMobilePage: React.FC = () => {
   
   const handleCloseCamera = () => {
     setShowCameraView(false); 
-    // Stream cleanup is handled by useEffect for showCameraView
-  }
+  };
 
   const handleNextImage = () => {
     if (currentImageIndex < scannedImages.length - 1) {
@@ -390,10 +378,20 @@ const ScanMobilePage: React.FC = () => {
     toast({ title: "Page Deleted", description: "The current page has been removed." });
   };
 
+  const handleNewScan = () => {
+    setScannedImages([]);
+    setCurrentImageIndex(-1);
+    setAppliedFilter("original");
+    setOcrAssessmentResult(null);
+    setOcrResultText("");
+    setShowCameraView(false); // Close camera if open
+    toast({ title: "New Scan Started", description: "All previous pages have been cleared." });
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
-      <AppHeader />
+      <AppHeader onNewScanClick={handleNewScan} />
       <main className="flex-grow container mx-auto p-4 sm:p-6 flex flex-col items-center gap-6">
         <canvas ref={canvasRef} className="hidden"></canvas>
         
@@ -469,7 +467,6 @@ const ScanMobilePage: React.FC = () => {
           onChange={handleFileChange}
           accept="image/*"
           className="hidden"
-          multiple // Allow multiple file selection for upload, though handler needs update for this
         />
       </main>
       <OcrModal 
