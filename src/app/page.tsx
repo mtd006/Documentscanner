@@ -186,7 +186,7 @@ const ScanMobilePage: React.FC = () => {
       toast({
         variant: "destructive",
         title: "Camera Access Required",
-        description: "Camera permission was denied or is not available. Please check your browser settings or use file upload.",
+        description: "Camera permission was denied or is not available. To enable it, please follow these steps: 1. Go to your browser's Settings. 2. Look for 'Privacy and Security' or 'Site Settings'. 3. Find 'Camera' and ensure it's set to 'Allow' for this site. You might also see a camera icon in your browser's address bar that you can click to manage permissions.",
       });
     } else { 
        toast({
