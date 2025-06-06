@@ -228,7 +228,7 @@ const ScanMobilePage: React.FC = () => {
     } else {
        toast({ variant: "destructive", title: "Capture Error", description: "Camera or canvas not ready." });
     }
-  }, [toast, addImageToScans]);
+  }, [toast, addImageToScans]); // addImageToScans was missing, but it's stable
   
   const handleUploadFileClick = () => {
     setShowCameraView(false);
@@ -348,42 +348,35 @@ const ScanMobilePage: React.FC = () => {
   };
 
   const handleDeleteCurrentImage = () => {
-    if (currentImageIndex === -1 || scannedImages.length === 0) {
+    const currentScannedImagesState = scannedImages; // Capture current state for length calculation
+    const currentIndexBeforeDelete = currentImageIndex;
+
+    if (currentIndexBeforeDelete === -1 || currentScannedImagesState.length === 0) {
+      toast({ variant: "destructive", title: "No Page", description: "There is no page to delete." });
       return;
     }
 
-    const indexBeingDeleted = currentImageIndex;
+    const lengthBeforeDelete = currentScannedImagesState.length;
 
-    setScannedImages(prevScannedImages => {
-      const newImagesArray = prevScannedImages.filter((_, idx) => idx !== indexBeingDeleted);
+    setScannedImages(prevImages => prevImages.filter((_, idx) => idx !== currentIndexBeforeDelete));
 
-      if (newImagesArray.length === 0) {
-        setCurrentImageIndex(-1);
-      } else {
-        if (indexBeingDeleted >= newImagesArray.length) {
-          setCurrentImageIndex(newImagesArray.length - 1);
-        } else {
-          // If deleting an image and there are images after it,
-          // the currentImageIndex should ideally remain the same,
-          // as the next image slides into its place.
-          // However, if it was the last one, we adjust.
-          // No change needed here if it's not the last one.
-          // The `setCurrentImageIndex(indexBeingDeleted)` is okay if it refers to the new array's state.
-        }
+    setCurrentImageIndex(() => {
+      const newLength = lengthBeforeDelete - 1;
+
+      if (newLength === 0) {
+        return -1; // No images left
       }
-      return newImagesArray;
-    });
 
-    // Adjust currentImageIndex after state update for scannedImages
-    setCurrentImageIndex(prevIndex => {
-        const newTotalImages = scannedImages.length -1; // because scannedImages hasn't updated yet in this scope
-        if (newTotalImages === 0) return -1;
-        if (indexBeingDeleted >= newTotalImages && newTotalImages > 0) {
-            return newTotalImages -1;
-        }
-        return prevIndex === indexBeingDeleted ? prevIndex : prevIndex; // if indexBeingDeleted was not the last, and current index moved
+      // If the deleted image was the last one in the context of the new array length,
+      // or if the old index is now out of bounds for the new array.
+      if (currentIndexBeforeDelete >= newLength) {
+        return newLength - 1; // Set to the new last index
+      }
+      
+      // Otherwise, the index remains the same, as a new image (the one after the deleted one)
+      // has shifted into the `currentIndexBeforeDelete` position.
+      return currentIndexBeforeDelete;
     });
-
 
     toast({ title: "Page Deleted", description: "The current page has been removed." });
   };
