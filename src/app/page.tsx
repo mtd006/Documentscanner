@@ -83,6 +83,7 @@ const ScanMobilePage: React.FC = () => {
 
     return () => {
       isMounted = false;
+      // Ensure video stream is stopped if component unmounts while camera view is active
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -119,6 +120,7 @@ const ScanMobilePage: React.FC = () => {
         stream.getTracks().forEach(track => track.stop());
       }
       if (videoRef.current && videoRef.current.srcObject) {
+        // This check is important to avoid errors if srcObject is already null
         const currentActiveStream = videoRef.current.srcObject as MediaStream;
         currentActiveStream.getTracks().forEach(track => track.stop());
         videoRef.current.srcObject = null;
@@ -188,6 +190,23 @@ const ScanMobilePage: React.FC = () => {
         title: "Checking Camera...",
         description: "Attempting to access camera. Please wait or respond to any permission prompts.",
       });
+       // Attempt to re-trigger permission check if initial was null or failed silently
+       const reCheckPerms = async () => {
+        try {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+          setHasCameraPermission(true);
+          setShowCameraView(true); 
+          tempStream.getTracks().forEach(track => track.stop()); // stop tracks immediately after check
+        } catch (error) {
+          setHasCameraPermission(false);
+          toast({
+            variant: "destructive",
+            title: "Camera Access Denied",
+            description: "Please enable camera permissions in your browser settings.",
+          });
+        }
+      };
+      reCheckPerms();
     }
   };
 
@@ -215,6 +234,14 @@ const ScanMobilePage: React.FC = () => {
         const dataUrl = canvas.toDataURL('image/jpeg');
         addImageToScans(dataUrl);
         toast({ title: "Image Captured & Added", description: "New page added to your document." });
+        // Keep camera view open:
+        // setShowCameraView(false); // Removed
+        // if (currentStream) { // Removed stream stopping logic here
+        //   currentStream.getTracks().forEach(track => track.stop());
+        // }
+        // if (videoRef.current) { // Removed
+        //   videoRef.current.srcObject = null;
+        // }
       } else {
          toast({ variant: "destructive", title: "Capture Error", description: "Could not get canvas context." });
          setShowCameraView(false); 
@@ -301,16 +328,16 @@ const ScanMobilePage: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!currentImageUrl) {
-      toast({ variant: "destructive", title: "No Image", description: "Please select or scan a page." });
+    if (scannedImages.length === 0) {
+      toast({ variant: "destructive", title: "No Document", description: "Please scan or upload at least one page." });
       return;
     }
     setShowSaveModal(true);
   };
 
   const handleShare = () => {
-     if (!currentImageUrl) {
-      toast({ variant: "destructive", title: "No Image", description: "Please select or scan a page." });
+     if (!currentImageUrl) { // Still operates on current image for link/email, but modal text will guide for all.
+      toast({ variant: "destructive", title: "No Page Selected", description: "Please select or scan a page to share its link/email, or save all pages as PDF to share the document." });
       return;
     }
     setShowShareModal(true);
@@ -318,6 +345,7 @@ const ScanMobilePage: React.FC = () => {
   
   const handleCloseCamera = () => {
     setShowCameraView(false); 
+    // Stream cleanup is handled by useEffect for showCameraView
   }
 
   const handleNextImage = () => {
@@ -441,6 +469,7 @@ const ScanMobilePage: React.FC = () => {
           onChange={handleFileChange}
           accept="image/*"
           className="hidden"
+          multiple // Allow multiple file selection for upload, though handler needs update for this
         />
       </main>
       <OcrModal 
@@ -451,6 +480,7 @@ const ScanMobilePage: React.FC = () => {
       <SaveModal 
         isOpen={showSaveModal} 
         onClose={() => setShowSaveModal(false)}
+        scannedImages={scannedImages}
         currentImageIndex={currentImageIndex}
         totalPages={scannedImages.length}
       />
@@ -466,5 +496,6 @@ const ScanMobilePage: React.FC = () => {
 }
 
 export default ScanMobilePage;
+    
 
     
