@@ -17,6 +17,7 @@ import {
   Loader2,
   Eye,
   Upload,
+  Trash2,
 } from "lucide-react";
 import {
   Select,
@@ -37,10 +38,11 @@ interface ControlsPanelProps {
   onRunOcr: () => void;
   onSave: () => void;
   onShare: () => void;
+  onDeleteCurrentImage: () => void;
   isImageLoaded: boolean;
   isLoading: boolean;
   ocrAssessmentResult: AssessOcrQualityOutput | null;
-  ocrResultTextForDisabledCheck: string; // Added for checking OCR run state
+  ocrResultTextForDisabledCheck: string;
 }
 
 export function ControlsPanel({
@@ -53,23 +55,19 @@ export function ControlsPanel({
   onRunOcr,
   onSave,
   onShare,
+  onDeleteCurrentImage,
   isImageLoaded,
   isLoading,
   ocrAssessmentResult,
-  ocrResultTextForDisabledCheck, // Destructure new prop
+  ocrResultTextForDisabledCheck,
 }: ControlsPanelProps) {
-  // Determine if OCR is currently running (for loader display on OCR button)
-  const isOcrRunning = isLoading && ocrResultTextForDisabledCheck === "" && ocrAssessmentResult === null; // More specific: loading, no text yet, and no prior assessment blocking it
+  const isOcrRunning = isLoading && ocrResultTextForDisabledCheck === "" && ocrAssessmentResult === null;
   const isAssessmentRunning = isLoading && ocrAssessmentResult === null;
 
-
-  // Disable OCR run button if assessment failed and no text has been extracted yet from a previous attempt
-  // Or if currently loading, or no image
   const disableRunOcrButton = 
     !isImageLoaded || 
     isLoading || 
     (ocrAssessmentResult !== null && !ocrAssessmentResult.willOcrBeSuccessful && ocrResultTextForDisabledCheck === "");
-
 
   return (
     <Card className="w-full max-w-md shadow-xl">
@@ -79,17 +77,31 @@ export function ControlsPanel({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Button onClick={onOpenCameraClick} variant="default" size="lg" disabled={isLoading}>
-            <Camera className="mr-2 h-5 w-5" /> Scan with Camera
+            <Camera className="mr-2 h-5 w-5" /> Add with Camera
           </Button>
           <Button onClick={onUploadFileClick} variant="outline" size="lg" disabled={isLoading}>
-            <Upload className="mr-2 h-5 w-5" /> Upload Image File
+            <Upload className="mr-2 h-5 w-5" /> Add by Upload
           </Button>
         </div>
 
         <Separator />
 
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Adjustments</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">Page Operations</h3>
+           <Button
+              onClick={onDeleteCurrentImage}
+              variant="destructive"
+              className="w-full"
+              disabled={!isImageLoaded || isLoading}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete Current Page
+            </Button>
+        </div>
+        
+        <Separator />
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Adjustments (Current Page)</h3>
           <div className="grid grid-cols-2 gap-2">
             <Button
               onClick={onEdgeDetection}
@@ -109,11 +121,11 @@ export function ControlsPanel({
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Image Enhancement</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">Image Enhancement (Current Page)</h3>
           <Select
             onValueChange={(value) => onApplyFilter(value)}
             disabled={!isImageLoaded || isLoading}
-            defaultValue="original"
+            defaultValue="original" // This might need to be dynamic if filters are per-image
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select filter" />
@@ -130,7 +142,7 @@ export function ControlsPanel({
         <Separator />
 
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Optical Character Recognition (OCR)</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">OCR (Current Page)</h3>
           <Button
             onClick={onAssessOcr}
             variant="outline"
@@ -174,17 +186,19 @@ export function ControlsPanel({
             variant="outline"
             disabled={!isImageLoaded || isLoading}
           >
-            <Save className="mr-2 h-4 w-4" /> Save
+            <Save className="mr-2 h-4 w-4" /> Save Current Page
           </Button>
           <Button
             onClick={onShare}
             variant="outline"
             disabled={!isImageLoaded || isLoading}
           >
-            <Share2 className="mr-2 h-4 w-4" /> Share
+            <Share2 className="mr-2 h-4 w-4" /> Share Current Page
           </Button>
         </div>
       </CardContent>
     </Card>
   );
 }
+
+    

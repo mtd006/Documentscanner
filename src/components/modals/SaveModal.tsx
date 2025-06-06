@@ -19,11 +19,15 @@ import jsPDF from "jspdf";
 interface SaveModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentImageIndex: number;
+  totalPages: number;
 }
 
-export function SaveModal({ isOpen, onClose }: SaveModalProps) {
+export function SaveModal({ isOpen, onClose, currentImageIndex, totalPages }: SaveModalProps) {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+
+  const pageInfo = totalPages > 0 ? `Page ${currentImageIndex + 1} of ${totalPages}` : "Document";
 
   const captureElementAsCanvas = async (): Promise<HTMLCanvasElement | null> => {
     const elementToCapture = document.getElementById("image-to-capture");
@@ -37,9 +41,9 @@ export function SaveModal({ isOpen, onClose }: SaveModalProps) {
     }
     try {
       const canvas = await html2canvas(elementToCapture, {
-        useCORS: true, // Important if images are from external sources, though not the case here
-        logging: false, // Disable console logging from html2canvas
-        scale: 2, // Increase scale for better quality
+        useCORS: true, 
+        logging: false,
+        scale: 2, 
       });
       return canvas;
     } catch (error) {
@@ -61,11 +65,12 @@ export function SaveModal({ isOpen, onClose }: SaveModalProps) {
       return;
     }
 
-    const filename = `scanned-document-${Date.now()}`;
+    const pageSuffix = totalPages > 1 ? `-page-${currentImageIndex + 1}` : "";
+    const filename = `scanned-document${pageSuffix}-${Date.now()}`;
 
     try {
       if (format === "PDF") {
-        const imgData = canvas.toDataURL("image/jpeg", 0.9); // Use JPEG for PDF to reduce size
+        const imgData = canvas.toDataURL("image/jpeg", 0.9); 
         const pdf = new jsPDF({
           orientation: canvas.width > canvas.height ? "landscape" : "portrait",
           unit: "px",
@@ -73,16 +78,16 @@ export function SaveModal({ isOpen, onClose }: SaveModalProps) {
         });
         pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
         pdf.save(`${filename}.pdf`);
-        toast({ title: "Success", description: "Document saved as PDF." });
+        toast({ title: "Success", description: `${pageInfo} saved as PDF.` });
       } else if (format === "JPG") {
-        const imgData = canvas.toDataURL("image/jpeg", 0.9); // Quality 0.9
+        const imgData = canvas.toDataURL("image/jpeg", 0.9); 
         const link = document.createElement("a");
         link.href = imgData;
         link.download = `${filename}.jpg`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        toast({ title: "Success", description: "Document saved as JPG." });
+        toast({ title: "Success", description: `${pageInfo} saved as JPG.` });
       } else if (format === "PNG") {
         const imgData = canvas.toDataURL("image/png");
         const link = document.createElement("a");
@@ -91,14 +96,14 @@ export function SaveModal({ isOpen, onClose }: SaveModalProps) {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        toast({ title: "Success", description: "Document saved as PNG." });
+        toast({ title: "Success", description: `${pageInfo} saved as PNG.` });
       }
     } catch (error) {
       console.error(`Error saving as ${format}:`, error);
       toast({
         variant: "destructive",
         title: "Save Error",
-        description: `Failed to save document as ${format}.`,
+        description: `Failed to save ${pageInfo} as ${format}.`,
       });
     } finally {
       setIsSaving(false);
@@ -110,21 +115,21 @@ export function SaveModal({ isOpen, onClose }: SaveModalProps) {
     <Dialog open={isOpen} onOpenChange={(open) => !isSaving && onClose()}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="font-headline">Save Document</DialogTitle>
+          <DialogTitle className="font-headline">Save Current Page</DialogTitle>
           <DialogDescription>
-            Choose a format to save your scanned document. Applied filters will be included.
+            Choose a format to save {pageInfo}. Applied filters will be included.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <Button onClick={() => handleSave("PDF")} variant="default" disabled={isSaving}>
+          <Button onClick={() => handleSave("PDF")} variant="default" disabled={isSaving || totalPages === 0}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Save as PDF
           </Button>
-          <Button onClick={() => handleSave("JPG")} variant="outline" disabled={isSaving}>
+          <Button onClick={() => handleSave("JPG")} variant="outline" disabled={isSaving || totalPages === 0}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save as JPG
           </Button>
-          <Button onClick={() => handleSave("PNG")} variant="outline" disabled={isSaving}>
+          <Button onClick={() => handleSave("PNG")} variant="outline" disabled={isSaving || totalPages === 0}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Save as PNG
           </Button>
@@ -138,3 +143,5 @@ export function SaveModal({ isOpen, onClose }: SaveModalProps) {
     </Dialog>
   );
 }
+
+    

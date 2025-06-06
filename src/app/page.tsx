@@ -13,12 +13,13 @@ import { performOcrAssessmentAction, performOcrAction } from "./actions";
 import type { AssessOcrQualityOutput } from "@/ai/flows/scan-mobile-assess-ocr";
 import type { ScanMobileOCROutput } from "@/ai/flows/scan-mobile-ocr";
 import { Button } from "@/components/ui/button";
-import { Camera } from "lucide-react";
+import { Camera, Trash2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 const ScanMobilePage: React.FC = () => {
-  const [scannedImage, setScannedImage] = useState<string | null>(null);
+  const [scannedImages, setScannedImages] = useState<string[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState<number>(-1);
   const [appliedFilter, setAppliedFilter] = useState<string>("original");
   const [isLoading, setIsLoading] = useState(false);
   const [ocrAssessmentResult, setOcrAssessmentResult] = useState<AssessOcrQualityOutput | null>(null);
@@ -36,10 +37,14 @@ const ScanMobilePage: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
+  const currentImageUrl = currentImageIndex >= 0 && currentImageIndex < scannedImages.length ? scannedImages[currentImageIndex] : null;
+
   useEffect(() => {
     let isMounted = true;
 
     const performInitialCameraCheck = async () => {
+      if (hasCameraPermission !== null) return; // Only run if initial state
+
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         if (isMounted) {
           toast({
@@ -54,10 +59,9 @@ const ScanMobilePage: React.FC = () => {
 
       let tempStream: MediaStream | null = null;
       try {
-        // Attempt to get user media to check permission
         tempStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         if (isMounted) {
-          setHasCameraPermission(true); // Permission granted
+          setHasCameraPermission(true);
         }
       } catch (error: unknown) {
         if (isMounted) {
@@ -66,25 +70,19 @@ const ScanMobilePage: React.FC = () => {
           } else {
             console.error('Error during initial camera permission check:', error);
           }
-          setHasCameraPermission(false); // Permission denied or other error
+          setHasCameraPermission(false);
         }
       } finally {
-        // If a stream was obtained (permission granted), stop its tracks immediately.
-        // This is just a permission check; the actual stream for the UI is handled by `handleOpenCamera`.
         if (tempStream) {
           tempStream.getTracks().forEach(track => track.stop());
         }
       }
     };
-
-    if (hasCameraPermission === null) {
-      performInitialCameraCheck();
-    }
+    
+    performInitialCameraCheck();
 
     return () => {
       isMounted = false;
-      // General cleanup for videoRef if it's active when the component unmounts
-      // This complements specific cleanups in handleCloseCamera, handleCaptureImage etc.
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -95,8 +93,17 @@ const ScanMobilePage: React.FC = () => {
 
 
   useEffect(() => {
+    // Reset OCR results when the current image changes
     setOcrAssessmentResult(null);
-  }, [scannedImage]);
+    setOcrResultText("");
+  }, [currentImageIndex, scannedImages.length]);
+
+
+  const addImageToScans = (imageDataUrl: string) => {
+    setScannedImages(prevImages => [...prevImages, imageDataUrl]);
+    setCurrentImageIndex(prevImages => prevImages.length); // Index of the new image
+    setAppliedFilter("original"); // Reset filter for new image
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -111,10 +118,9 @@ const ScanMobilePage: React.FC = () => {
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setScannedImage(reader.result as string);
-        setAppliedFilter("original");
+        addImageToScans(reader.result as string);
         setShowCameraView(false); 
-        toast({ title: "Image Loaded", description: "Your document is ready for processing." });
+        toast({ title: "Image Added", description: "New page added to your document." });
       };
       reader.onerror = (errorEvent: ProgressEvent<FileReader>) => {
         const errorMessage = (errorEvent.target as FileReader)?.error?.message || "Could not read the selected file.";
@@ -125,18 +131,17 @@ const ScanMobilePage: React.FC = () => {
         });
       }
       reader.readAsDataURL(file);
+      if (fileInputRef.current) { // Reset file input to allow uploading the same file again
+        fileInputRef.current.value = "";
+      }
     }
   };
 
   const handleOpenCamera = () => {
     if (hasCameraPermission === true) {
-      setScannedImage(null);
-      setAppliedFilter("original");
-      setOcrAssessmentResult(null);
-      setOcrResultText("");
       setShowCameraView(true);
       
-      setTimeout(() => { // Ensure DOM is updated for videoRef
+      setTimeout(() => { 
         if (videoRef.current) {
           navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(stream => {
@@ -174,14 +179,6 @@ const ScanMobilePage: React.FC = () => {
         title: "Checking Camera...",
         description: "Attempting to access camera. Please wait or respond to any permission prompts.",
       });
-      // Optionally, re-trigger permission check if it's null, though useEffect should handle initial.
-      // This case implies initial check might still be ongoing or failed silently.
-      if (hasCameraPermission === null) {
-        // Forcing a re-check if user clicks when it's still null.
-        // This will run the useEffect logic again if hasCameraPermission is set to null
-        // Or directly call a check function.
-        // For simplicity, we rely on the toast and the user potentially retrying.
-      }
     }
   };
 
@@ -213,10 +210,9 @@ const ScanMobilePage: React.FC = () => {
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg');
-        setScannedImage(dataUrl);
-        setAppliedFilter("original");
+        addImageToScans(dataUrl);
         setShowCameraView(false);
-        toast({ title: "Image Captured", description: "Your document is ready for processing." });
+        toast({ title: "Image Captured & Added", description: "New page added to your document." });
         
         if (currentStream) {
             currentStream.getTracks().forEach(track => track.stop());
@@ -230,7 +226,7 @@ const ScanMobilePage: React.FC = () => {
     } else {
        toast({ variant: "destructive", title: "Capture Error", description: "Camera or canvas not ready." });
     }
-  }, [toast]);
+  }, [toast, addImageToScans]);
   
   const handleUploadFileClick = () => {
     setShowCameraView(false);
@@ -257,18 +253,18 @@ const ScanMobilePage: React.FC = () => {
        return;
     }
     setAppliedFilter(filter);
-    toast({ title: "Filter Applied", description: `Switched to ${filter} view.` });
+    toast({ title: "Filter Applied", description: `Switched to ${filter} view for current page.` });
   };
 
   const handleAssessOcr = async () => {
-    if (!scannedImage) {
+    if (!currentImageUrl) {
       toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
       return;
     }
     setIsLoading(true);
     setOcrAssessmentResult(null); 
     try {
-      const assessment = await performOcrAssessmentAction({ photoDataUri: scannedImage });
+      const assessment = await performOcrAssessmentAction({ photoDataUri: currentImageUrl });
       setOcrAssessmentResult(assessment);
       toast({ title: "OCR Assessment Complete", description: assessment.willOcrBeSuccessful ? "Document quality looks good for OCR." : "Document quality might be challenging for OCR." });
     } catch (error: unknown) {
@@ -279,14 +275,14 @@ const ScanMobilePage: React.FC = () => {
   };
 
   const handleRunOcr = async () => {
-    if (!scannedImage) {
+    if (!currentImageUrl) {
       toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
       return;
     }
     setIsLoading(true);
     setOcrResultText(""); 
     try {
-      const result: ScanMobileOCROutput = await performOcrAction({ photoDataUri: scannedImage });
+      const result: ScanMobileOCROutput = await performOcrAction({ photoDataUri: currentImageUrl });
       if (result.isConvertible && result.text) {
         setOcrResultText(result.text);
         setShowOcrModal(true);
@@ -305,16 +301,16 @@ const ScanMobilePage: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (!scannedImage) {
-      toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
+    if (!currentImageUrl) {
+      toast({ variant: "destructive", title: "No Image", description: "Please select or scan a page." });
       return;
     }
     setShowSaveModal(true);
   };
 
   const handleShare = () => {
-     if (!scannedImage) {
-      toast({ variant: "destructive", title: "No Image", description: "Please scan or upload a document first." });
+     if (!currentImageUrl) {
+      toast({ variant: "destructive", title: "No Image", description: "Please select or scan a page." });
       return;
     }
     setShowShareModal(true);
@@ -328,6 +324,55 @@ const ScanMobilePage: React.FC = () => {
         videoRef.current.srcObject = null;
     }
   }
+
+  const handleNextImage = () => {
+    if (currentImageIndex < scannedImages.length - 1) {
+      setCurrentImageIndex(prevIndex => prevIndex + 1);
+    }
+  };
+
+  const handlePreviousImage = () => {
+    if (currentImageIndex > 0) {
+      setCurrentImageIndex(prevIndex => prevIndex - 1);
+    }
+  };
+
+  const handleDeleteCurrentImage = () => {
+    if (currentImageIndex === -1 || scannedImages.length === 0) return;
+
+    setScannedImages(prevImages => {
+      const newImages = [...prevImages];
+      newImages.splice(currentImageIndex, 1);
+      return newImages;
+    });
+
+    if (scannedImages.length === 1) { // Was the last image
+      setCurrentImageIndex(-1);
+    } else if (currentImageIndex >= scannedImages.length - 1) { // Was the last image in a list > 1
+      setCurrentImageIndex(prevIndex => prevIndex -1);
+    } 
+    // If it was an image in the middle, currentImageIndex effectively stays, pointing to the next image that shifted into its place
+    // or it will be adjusted if it was the last one.
+    // If currentImageIndex becomes >= new length, it will be adjusted by ImageDisplay or here.
+    // This logic is slightly complex, ensure currentImageIndex is valid after deletion.
+    // A simpler approach might be:
+    // setCurrentImageIndex(prev => Math.min(prev, newImages.length - 1));
+    // For currentImageIndex, after splice, if it was the last item, it should decrease.
+    // If it was not the last item, the index remains valid for the next item.
+    // If the list becomes empty, set to -1.
+
+    // Corrected logic for currentImageIndex after deletion:
+    setCurrentImageIndex(prevIdx => {
+        const newLength = scannedImages.length - 1;
+        if (newLength === 0) return -1;
+        if (prevIdx >= newLength) return newLength - 1;
+        return prevIdx;
+    });
+
+
+    toast({ title: "Page Deleted", description: "The current page has been removed." });
+  };
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -345,13 +390,13 @@ const ScanMobilePage: React.FC = () => {
                 playsInline 
                 muted 
               />
-              {hasCameraPermission === null && ( // Still checking
+              {hasCameraPermission === null && ( 
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                     <p className="text-white p-4 bg-black/50 rounded-md">Initializing camera...</p>
                 </div>
               )}
             </div>
-            {hasCameraPermission === false && showCameraView && ( // Explicitly check showCameraView here for the alert
+            {hasCameraPermission === false && showCameraView && ( 
               <Alert variant="destructive" className="w-full max-w-md">
                 <AlertTitle>Camera Access Denied</AlertTitle>
                 <AlertDescription>
@@ -361,19 +406,26 @@ const ScanMobilePage: React.FC = () => {
             )}
             <div className="flex flex-col sm:flex-row gap-2 mt-4 w-full max-w-md">
               <Button onClick={handleCaptureImage} className="flex-1" disabled={hasCameraPermission !== true || isLoading}>
-                <Camera className="mr-2 h-5 w-5" /> Capture Image
+                <Camera className="mr-2 h-5 w-5" /> Capture & Add Page
               </Button>
               <Button onClick={handleCloseCamera} variant="outline" className="flex-1">
                 Cancel
               </Button>
             </div>
             <Button onClick={handleUploadFileClick} variant="link" className="mt-2">
-                Or Upload an Image File
+                Or Add Page by Upload
             </Button>
           </>
         ) : (
           <>
-            <ImageDisplay imageUrl={scannedImage} appliedFilter={appliedFilter} />
+            <ImageDisplay 
+              imageUrl={currentImageUrl} 
+              appliedFilter={appliedFilter}
+              currentImageIndex={currentImageIndex}
+              totalPages={scannedImages.length}
+              onNextImage={handleNextImage}
+              onPreviousImage={handlePreviousImage}
+            />
             <ControlsPanel
               onOpenCameraClick={handleOpenCamera}
               onUploadFileClick={handleUploadFileClick}
@@ -384,7 +436,8 @@ const ScanMobilePage: React.FC = () => {
               onRunOcr={handleRunOcr}
               onSave={handleSave}
               onShare={handleShare}
-              isImageLoaded={!!scannedImage}
+              onDeleteCurrentImage={handleDeleteCurrentImage}
+              isImageLoaded={scannedImages.length > 0 && currentImageIndex !== -1}
               isLoading={isLoading}
               ocrAssessmentResult={ocrAssessmentResult}
               ocrResultTextForDisabledCheck={ocrResultText}
@@ -406,7 +459,9 @@ const ScanMobilePage: React.FC = () => {
       />
       <SaveModal 
         isOpen={showSaveModal} 
-        onClose={() => setShowSaveModal(false)} 
+        onClose={() => setShowSaveModal(false)}
+        currentImageIndex={currentImageIndex}
+        totalPages={scannedImages.length}
       />
       <ShareModal 
         isOpen={showShareModal} 
@@ -417,3 +472,5 @@ const ScanMobilePage: React.FC = () => {
 }
 
 export default ScanMobilePage;
+
+    
