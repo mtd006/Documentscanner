@@ -83,8 +83,6 @@ const ScanMobilePage: React.FC = () => {
 
     return () => {
       isMounted = false;
-      // General cleanup for videoRef if it still holds a stream,
-      // though the stream management useEffect should primarily handle this.
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -95,8 +93,6 @@ const ScanMobilePage: React.FC = () => {
 
 
   useEffect(() => {
-    // This effect handles starting and stopping the camera stream
-    // when showCameraView changes.
     let stream: MediaStream | null = null;
     const startStream = async () => {
       if (videoRef.current && hasCameraPermission === true) {
@@ -104,7 +100,6 @@ const ScanMobilePage: React.FC = () => {
           stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
           if (videoRef.current) { 
             videoRef.current.srcObject = stream;
-            // videoRef.current.play() is not strictly necessary with autoPlay
           }
         } catch (err) {
           console.error("Error starting camera stream:", err);
@@ -120,7 +115,6 @@ const ScanMobilePage: React.FC = () => {
     }
 
     return () => {
-      // Cleanup: stop the stream when the component unmounts or showCameraView becomes false
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -139,14 +133,14 @@ const ScanMobilePage: React.FC = () => {
   }, [currentImageIndex, scannedImages.length]);
 
 
-  const addImageToScans = (imageDataUrl: string) => {
+  const addImageToScans = useCallback((imageDataUrl: string) => {
     setScannedImages(prevScannedImgs => {
       const newScannedImgs = [...prevScannedImgs, imageDataUrl];
       setCurrentImageIndex(prevScannedImgs.length); 
       return newScannedImgs;
     });
     setAppliedFilter("original");
-  };
+  }, [setScannedImages, setCurrentImageIndex, setAppliedFilter]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -183,7 +177,6 @@ const ScanMobilePage: React.FC = () => {
   const handleOpenCamera = () => {
     if (hasCameraPermission === true) {
       setShowCameraView(true);
-      // Stream starting is now handled by useEffect [showCameraView, hasCameraPermission]
     } else if (hasCameraPermission === false) {
       toast({
         variant: "destructive",
@@ -195,7 +188,6 @@ const ScanMobilePage: React.FC = () => {
         title: "Checking Camera...",
         description: "Attempting to access camera. Please wait or respond to any permission prompts.",
       });
-      // Optionally, try to re-trigger permission request or guide user
     }
   };
 
@@ -210,7 +202,7 @@ const ScanMobilePage: React.FC = () => {
 
       if (videoWidth === 0 || videoHeight === 0 || !currentStream || !currentStream.active) {
           toast({ variant: "destructive", title: "Capture Error", description: "Video stream not ready or inactive. Please try opening the camera again." });
-          setShowCameraView(false); // Close camera view on stream error; useEffect will clean up stream
+          setShowCameraView(false); 
           return;
       }
 
@@ -222,22 +214,19 @@ const ScanMobilePage: React.FC = () => {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg');
         addImageToScans(dataUrl);
-        // Keep camera view open:
-        // setShowCameraView(false); // REMOVED
         toast({ title: "Image Captured & Added", description: "New page added to your document." });
-        // Stream is NOT stopped here; it remains active for next capture or until 'Cancel'
       } else {
          toast({ variant: "destructive", title: "Capture Error", description: "Could not get canvas context." });
-         setShowCameraView(false); // Close camera view on canvas error
+         setShowCameraView(false); 
       }
     } else {
        toast({ variant: "destructive", title: "Capture Error", description: "Camera or canvas not ready." });
-       setShowCameraView(false); // Close camera view if refs not ready
+       setShowCameraView(false); 
     }
   }, [toast, addImageToScans]); 
   
   const handleUploadFileClick = () => {
-    setShowCameraView(false); // This will trigger useEffect to stop camera if active
+    setShowCameraView(false); 
     fileInputRef.current?.click();
   };
 
@@ -328,7 +317,7 @@ const ScanMobilePage: React.FC = () => {
   };
   
   const handleCloseCamera = () => {
-    setShowCameraView(false); // This will trigger the useEffect to stop the camera stream
+    setShowCameraView(false); 
   }
 
   const handleNextImage = () => {
