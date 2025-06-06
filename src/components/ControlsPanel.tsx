@@ -7,7 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Camera,
-  Crop,
+  Target, // Changed from Crop
+  Crop,   // New icon for Crop Image
+  SlidersHorizontal, // New icon for Brightness/Contrast
   Maximize,
   Wand2,
   Sparkles,
@@ -33,6 +35,8 @@ interface ControlsPanelProps {
   onUploadFileClick: () => void;
   onEdgeDetection: () => void;
   onPerspectiveCorrection: () => void;
+  onCropImage: () => void; // New prop
+  onBrightnessContrast: () => void; // New prop
   onApplyFilter: (filter: string) => void;
   onAssessOcr: () => void;
   onRunOcr: () => void;
@@ -50,6 +54,8 @@ export function ControlsPanel({
   onUploadFileClick,
   onEdgeDetection,
   onPerspectiveCorrection,
+  onCropImage,
+  onBrightnessContrast,
   onApplyFilter,
   onAssessOcr,
   onRunOcr,
@@ -108,7 +114,7 @@ export function ControlsPanel({
               variant="outline"
               disabled={!isImageLoaded || isLoading}
             >
-              <Crop className="mr-2 h-4 w-4" /> Edge Detect
+              <Target className="mr-2 h-4 w-4" /> Edge Detect
             </Button>
             <Button
               onClick={onPerspectiveCorrection}
@@ -116,6 +122,20 @@ export function ControlsPanel({
               disabled={!isImageLoaded || isLoading}
             >
               <Maximize className="mr-2 h-4 w-4" /> Perspective
+            </Button>
+            <Button
+              onClick={onCropImage}
+              variant="outline"
+              disabled={!isImageLoaded || isLoading}
+            >
+              <Crop className="mr-2 h-4 w-4" /> Crop Image
+            </Button>
+            <Button
+              onClick={onBrightnessContrast}
+              variant="outline"
+              disabled={!isImageLoaded || isLoading}
+            >
+              <SlidersHorizontal className="mr-2 h-4 w-4" /> Brightness/Contrast
             </Button>
           </div>
         </div>
@@ -125,7 +145,7 @@ export function ControlsPanel({
           <Select
             onValueChange={(value) => onApplyFilter(value)}
             disabled={!isImageLoaded || isLoading}
-            defaultValue="original" // This might need to be dynamic if filters are per-image
+            defaultValue="original"
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select filter" />
@@ -200,5 +220,3 @@ export function ControlsPanel({
     </Card>
   );
 }
-
-    

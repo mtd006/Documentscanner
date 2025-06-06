@@ -13,7 +13,7 @@ import { performOcrAssessmentAction, performOcrAction } from "./actions";
 import type { AssessOcrQualityOutput } from "@/ai/flows/scan-mobile-assess-ocr";
 import type { ScanMobileOCROutput } from "@/ai/flows/scan-mobile-ocr";
 import { Button } from "@/components/ui/button";
-import { Camera, Trash2 } from "lucide-react";
+import { Camera } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,7 @@ const ScanMobilePage: React.FC = () => {
     let isMounted = true;
 
     const performInitialCameraCheck = async () => {
-      if (hasCameraPermission !== null) return; // Only run if initial state
+      if (hasCameraPermission !== null) return; 
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         if (isMounted) {
@@ -93,7 +93,6 @@ const ScanMobilePage: React.FC = () => {
 
 
   useEffect(() => {
-    // Reset OCR results when the current image changes
     setOcrAssessmentResult(null);
     setOcrResultText("");
   }, [currentImageIndex, scannedImages.length]);
@@ -101,8 +100,8 @@ const ScanMobilePage: React.FC = () => {
 
   const addImageToScans = (imageDataUrl: string) => {
     setScannedImages(prevImages => [...prevImages, imageDataUrl]);
-    setCurrentImageIndex(prevImages => prevImages.length); // Index of the new image
-    setAppliedFilter("original"); // Reset filter for new image
+    setCurrentImageIndex(prevImages => prevImages.length); 
+    setAppliedFilter("original"); 
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,7 +130,7 @@ const ScanMobilePage: React.FC = () => {
         });
       }
       reader.readAsDataURL(file);
-      if (fileInputRef.current) { // Reset file input to allow uploading the same file again
+      if (fileInputRef.current) { 
         fileInputRef.current.value = "";
       }
     }
@@ -246,6 +245,14 @@ const ScanMobilePage: React.FC = () => {
     toast({ title: "Feature Info", description: "Perspective correction coming soon!" });
   };
 
+  const handleCropImage = () => {
+    toast({ title: "Feature Info", description: "Crop image feature coming soon!" });
+  };
+
+  const handleBrightnessContrast = () => {
+    toast({ title: "Feature Info", description: "Brightness/Contrast adjustment coming soon!" });
+  };
+
   const handleApplyFilter = (filter: string) => {
     if (filter === "enhance") {
        toast({ title: "Feature Info", description: "Color enhancement filter coming soon!" });
@@ -345,30 +352,13 @@ const ScanMobilePage: React.FC = () => {
       newImages.splice(currentImageIndex, 1);
       return newImages;
     });
-
-    if (scannedImages.length === 1) { // Was the last image
-      setCurrentImageIndex(-1);
-    } else if (currentImageIndex >= scannedImages.length - 1) { // Was the last image in a list > 1
-      setCurrentImageIndex(prevIndex => prevIndex -1);
-    } 
-    // If it was an image in the middle, currentImageIndex effectively stays, pointing to the next image that shifted into its place
-    // or it will be adjusted if it was the last one.
-    // If currentImageIndex becomes >= new length, it will be adjusted by ImageDisplay or here.
-    // This logic is slightly complex, ensure currentImageIndex is valid after deletion.
-    // A simpler approach might be:
-    // setCurrentImageIndex(prev => Math.min(prev, newImages.length - 1));
-    // For currentImageIndex, after splice, if it was the last item, it should decrease.
-    // If it was not the last item, the index remains valid for the next item.
-    // If the list becomes empty, set to -1.
-
-    // Corrected logic for currentImageIndex after deletion:
+    
     setCurrentImageIndex(prevIdx => {
         const newLength = scannedImages.length - 1;
         if (newLength === 0) return -1;
         if (prevIdx >= newLength) return newLength - 1;
         return prevIdx;
     });
-
 
     toast({ title: "Page Deleted", description: "The current page has been removed." });
   };
@@ -431,6 +421,8 @@ const ScanMobilePage: React.FC = () => {
               onUploadFileClick={handleUploadFileClick}
               onEdgeDetection={handleEdgeDetection}
               onPerspectiveCorrection={handlePerspectiveCorrection}
+              onCropImage={handleCropImage}
+              onBrightnessContrast={handleBrightnessContrast}
               onApplyFilter={handleApplyFilter}
               onAssessOcr={handleAssessOcr}
               onRunOcr={handleRunOcr}
@@ -472,5 +464,3 @@ const ScanMobilePage: React.FC = () => {
 }
 
 export default ScanMobilePage;
-
-    
