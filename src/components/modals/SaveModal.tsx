@@ -93,14 +93,14 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
 
     try {
       if (format === "PDF") {
-        const pdf = new jsPDF({ unit: 'pt' }); // Initialize with default (A4 portrait) but will be overridden if needed
-        if (pdf.getNumberOfPages() === 1 && !pdf.internal.pages[1]?.length) {
-             pdf.deletePage(1); // Remove initial blank page
-        }
-
         if (totalPages > 1) {
           // Save all pages as PDF
           if (selectedPaperSize === 'auto') {
+            const pdf = new jsPDF({ unit: 'pt' });
+            if (pdf.getNumberOfPages() > 0) { // Ensure there's a page to delete
+                pdf.deletePage(1); // Delete the default initial page
+            }
+
             for (let i = 0; i < scannedImages.length; i++) {
               const imgDataUrl = scannedImages[i];
               const img = new Image();
@@ -121,14 +121,12 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
                 }
               });
             }
-          } else { // Specific paper size selected
-            const paperFormat = PAPER_SIZES[selectedPaperSize];
-            // Re-initialize or configure PDF for selected paper size
-            const specificPdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: selectedPaperSize as PaperSizeKey });
-             if (specificPdf.getNumberOfPages() === 1 && !specificPdf.internal.pages[1]?.length) {
-                specificPdf.deletePage(1);
-            }
+            pdf.save(`scanned-document-all-${timestamp}.pdf`);
+            toast({ title: "Success", description: `All ${totalPages} pages saved as PDF.` });
 
+          } else { // Specific paper size selected
+            const specificPdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: selectedPaperSize as PaperSizeKey });
+            
             for (let i = 0; i < scannedImages.length; i++) {
               const imgDataUrl = scannedImages[i];
               const img = new Image();
@@ -147,8 +145,10 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
 
                   const x = (pagePaperWidth - scaledWidth) / 2;
                   const y = (pagePaperHeight - scaledHeight) / 2;
-
-                  specificPdf.addPage();
+                  
+                  if (i > 0) { // Add a new page only for subsequent images
+                    specificPdf.addPage();
+                  }
                   specificPdf.addImage(imgDataUrl, 'JPEG', x, y, scaledWidth, scaledHeight);
                   resolve();
                 };
@@ -161,13 +161,7 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
             }
             specificPdf.save(`scanned-document-all-${timestamp}.pdf`);
             toast({ title: "Success", description: `All ${totalPages} pages saved as PDF (${PAPER_SIZES[selectedPaperSize].label}).` });
-            setIsSaving(false);
-            onClose();
-            return; // Exit early as specificPdf.save was called
           }
-          pdf.save(`scanned-document-all-${timestamp}.pdf`);
-          toast({ title: "Success", description: `All ${totalPages} pages saved as PDF.` });
-
         } else { // Save current single page as PDF (respecting filters)
           const canvas = await captureCurrentElementAsCanvas();
           if (!canvas) {
@@ -274,4 +268,6 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
   );
 }
     
+    
+
     
