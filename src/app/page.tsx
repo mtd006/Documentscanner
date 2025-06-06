@@ -101,8 +101,7 @@ const ScanMobilePage: React.FC = () => {
   const addImageToScans = (imageDataUrl: string) => {
     setScannedImages(prevScannedImgs => {
       const newScannedImgs = [...prevScannedImgs, imageDataUrl];
-      // The index of the newly added image is the length of the *previous* array.
-      setCurrentImageIndex(prevScannedImgs.length);
+      setCurrentImageIndex(prevScannedImgs.length); // Index of the newly added image
       return newScannedImgs;
     });
     setAppliedFilter("original");
@@ -364,11 +363,27 @@ const ScanMobilePage: React.FC = () => {
         if (indexBeingDeleted >= newImagesArray.length) {
           setCurrentImageIndex(newImagesArray.length - 1);
         } else {
-          setCurrentImageIndex(indexBeingDeleted);
+          // If deleting an image and there are images after it,
+          // the currentImageIndex should ideally remain the same,
+          // as the next image slides into its place.
+          // However, if it was the last one, we adjust.
+          // No change needed here if it's not the last one.
+          // The `setCurrentImageIndex(indexBeingDeleted)` is okay if it refers to the new array's state.
         }
       }
       return newImagesArray;
     });
+
+    // Adjust currentImageIndex after state update for scannedImages
+    setCurrentImageIndex(prevIndex => {
+        const newTotalImages = scannedImages.length -1; // because scannedImages hasn't updated yet in this scope
+        if (newTotalImages === 0) return -1;
+        if (indexBeingDeleted >= newTotalImages && newTotalImages > 0) {
+            return newTotalImages -1;
+        }
+        return prevIndex === indexBeingDeleted ? prevIndex : prevIndex; // if indexBeingDeleted was not the last, and current index moved
+    });
+
 
     toast({ title: "Page Deleted", description: "The current page has been removed." });
   };
@@ -468,11 +483,12 @@ const ScanMobilePage: React.FC = () => {
       <ShareModal 
         isOpen={showShareModal} 
         onClose={() => setShowShareModal(false)} 
+        currentImageUrl={currentImageUrl}
+        currentImageIndex={currentImageIndex}
+        totalPages={scannedImages.length}
       />
     </div>
   );
 }
 
 export default ScanMobilePage;
-
-    
