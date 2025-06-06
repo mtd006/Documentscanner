@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -15,9 +16,13 @@ export function ImageDisplay({ imageUrl, appliedFilter }: ImageDisplayProps) {
   } else if (appliedFilter === "bw") {
     filterClasses = "filter grayscale contrast-150 brightness-110";
   }
+  // Add other filters here if needed
 
   return (
-    <div className="w-full max-w-md aspect-[3/4] bg-muted rounded-lg shadow-lg overflow-hidden flex items-center justify-center border border-border">
+    <div 
+      id="image-to-capture" // ID for html2canvas to target
+      className="w-full max-w-md aspect-[3/4] bg-muted rounded-lg shadow-lg overflow-hidden flex items-center justify-center border border-border"
+    >
       {imageUrl ? (
         <Image
           src={imageUrl}
@@ -25,18 +30,21 @@ export function ImageDisplay({ imageUrl, appliedFilter }: ImageDisplayProps) {
           width={600}
           height={800}
           className={cn("object-contain w-full h-full", filterClasses)}
-          priority
+          priority // Ensure image is loaded with high priority
+          quality={100} // Ensure source image quality for canvas capture is high
         />
       ) : (
-        <Image
-          src="https://placehold.co/600x800.png"
-          alt="Placeholder for scanned document"
-          width={600}
-          height={800}
-          data-ai-hint="document scan"
-          className="object-contain w-full h-full opacity-50"
-          priority
-        />
+        <div className="w-full h-full flex items-center justify-center">
+          <Image
+            src="https://placehold.co/600x800.png"
+            alt="Placeholder for scanned document"
+            width={600}
+            height={800}
+            data-ai-hint="document scan"
+            className="object-contain w-full h-full opacity-50"
+            priority
+          />
+        </div>
       )}
     </div>
   );
