@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,24 +12,47 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, FileText } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface SaveModalProps {
   isOpen: boolean;
   onClose: () => void;
-  scannedImages: string[]; // Now accepts all images
+  scannedImages: string[];
   currentImageIndex: number;
   totalPages: number;
 }
 
+const PAPER_SIZES = {
+  auto: { width: 0, height: 0, label: "Auto (Fit to Image)" }, // Width/height 0 indicates dynamic sizing
+  a4: { width: 595.28, height: 841.89, label: "A4 (210 x 297 mm)" },
+  letter: { width: 612, height: 792, label: "Letter (8.5 x 11 in)" },
+  legal: { width: 612, height: 1008, label: "Legal (8.5 x 14 in)" },
+} as const;
+
+type PaperSizeKey = keyof typeof PAPER_SIZES;
+
 export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, totalPages }: SaveModalProps) {
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedPaperSize, setSelectedPaperSize] = useState<PaperSizeKey>('auto');
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedPaperSize('auto'); // Reset to default when modal opens
+    }
+  }, [isOpen]);
 
   const currentVisiblePageInfo = totalPages > 0 ? `Page ${currentImageIndex + 1} of ${totalPages}` : "Document";
-  const documentInfo = totalPages > 1 ? `${totalPages} pages` : currentVisiblePageInfo;
 
   const captureCurrentElementAsCanvas = async (): Promise<HTMLCanvasElement | null> => {
     const elementToCapture = document.getElementById("image-to-capture");
@@ -43,9 +66,9 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
     }
     try {
       const canvas = await html2canvas(elementToCapture, {
-        useCORS: true, 
+        useCORS: true,
         logging: false,
-        scale: 2, 
+        scale: 2,
       });
       return canvas;
     } catch (error) {
@@ -70,52 +93,77 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
 
     try {
       if (format === "PDF") {
+        const pdf = new jsPDF({ unit: 'pt' }); // Initialize with default (A4 portrait) but will be overridden if needed
+        if (pdf.getNumberOfPages() === 1 && !pdf.internal.pages[1]?.length) {
+             pdf.deletePage(1); // Remove initial blank page
+        }
+
         if (totalPages > 1) {
           // Save all pages as PDF
-          const pdf = new jsPDF(); // Default portrait, A4. We'll add pages as needed.
-          // Remove default first page if it's blank (jsPDF adds one by default)
-          if (pdf.getNumberOfPages() === 1 && !pdf.internal.pages[1]?.length) {
-             pdf.deletePage(1);
-          }
+          if (selectedPaperSize === 'auto') {
+            for (let i = 0; i < scannedImages.length; i++) {
+              const imgDataUrl = scannedImages[i];
+              const img = new Image();
+              img.src = imgDataUrl;
 
-          for (let i = 0; i < scannedImages.length; i++) {
-            const imgDataUrl = scannedImages[i];
-            const img = new Image();
-            img.src = imgDataUrl;
-            
-            await new Promise((resolve, reject) => {
+              await new Promise<void>((resolve, reject) => {
                 img.onload = () => {
-                    const imgWidth = img.naturalWidth;
-                    const imgHeight = img.naturalHeight;
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = pdf.internal.pageSize.getHeight();
-                    
-                    // Calculate scaling to fit image within PDF page, maintaining aspect ratio
-                    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-                    const scaledWidth = imgWidth * ratio;
-                    const scaledHeight = imgHeight * ratio;
-
-                    // Center the image on the page
-                    const x = (pdfWidth - scaledWidth) / 2;
-                    const y = (pdfHeight - scaledHeight) / 2;
-                    
-                    if (i > 0 || pdf.getNumberOfPages() === 0) { // Add new page for subsequent images or if it's the first image and no default page exists
-                        pdf.addPage();
-                    } else if (pdf.getNumberOfPages() > 0 && pdf.internal.pages[pdf.getPageInfo(pdf.getCurrentPageInfo().pageNumber).pageContext.j]) { // If it's the first image but on an existing (possibly default) page
-                         // Ensure we are on the correct page if jsPDF added a default one
-                         pdf.setPage(pdf.getNumberOfPages());
-                    }
-
-
-                    pdf.addImage(imgDataUrl, 'JPEG', x, y, scaledWidth, scaledHeight);
-                    resolve(true);
+                  const imgWidth = img.naturalWidth;
+                  const imgHeight = img.naturalHeight;
+                  pdf.addPage([imgWidth, imgHeight], imgWidth > imgHeight ? 'l' : 'p');
+                  pdf.addImage(imgDataUrl, 'JPEG', 0, 0, imgWidth, imgHeight);
+                  resolve();
                 };
                 img.onerror = (err) => {
-                    console.error("Error loading image for PDF:", err);
-                    toast({ variant: "destructive", title: "Image Load Error", description: `Could not load page ${i+1} for PDF.`});
-                    reject(err);
+                  console.error("Error loading image for PDF (auto size):", err);
+                  toast({ variant: "destructive", title: "Image Load Error", description: `Could not load page ${i + 1} for PDF.` });
+                  reject(err);
                 }
-            });
+              });
+            }
+          } else { // Specific paper size selected
+            const paperFormat = PAPER_SIZES[selectedPaperSize];
+            // Re-initialize or configure PDF for selected paper size
+            const specificPdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: selectedPaperSize as PaperSizeKey });
+             if (specificPdf.getNumberOfPages() === 1 && !specificPdf.internal.pages[1]?.length) {
+                specificPdf.deletePage(1);
+            }
+
+            for (let i = 0; i < scannedImages.length; i++) {
+              const imgDataUrl = scannedImages[i];
+              const img = new Image();
+              img.src = imgDataUrl;
+
+              await new Promise<void>((resolve, reject) => {
+                img.onload = () => {
+                  const imgWidth = img.naturalWidth;
+                  const imgHeight = img.naturalHeight;
+                  const pagePaperWidth = specificPdf.internal.pageSize.getWidth();
+                  const pagePaperHeight = specificPdf.internal.pageSize.getHeight();
+
+                  const ratio = Math.min(pagePaperWidth / imgWidth, pagePaperHeight / imgHeight);
+                  const scaledWidth = imgWidth * ratio;
+                  const scaledHeight = imgHeight * ratio;
+
+                  const x = (pagePaperWidth - scaledWidth) / 2;
+                  const y = (pagePaperHeight - scaledHeight) / 2;
+
+                  specificPdf.addPage();
+                  specificPdf.addImage(imgDataUrl, 'JPEG', x, y, scaledWidth, scaledHeight);
+                  resolve();
+                };
+                img.onerror = (err) => {
+                  console.error("Error loading image for PDF (standard size):", err);
+                  toast({ variant: "destructive", title: "Image Load Error", description: `Could not load page ${i + 1} for PDF.` });
+                  reject(err);
+                }
+              });
+            }
+            specificPdf.save(`scanned-document-all-${timestamp}.pdf`);
+            toast({ title: "Success", description: `All ${totalPages} pages saved as PDF (${PAPER_SIZES[selectedPaperSize].label}).` });
+            setIsSaving(false);
+            onClose();
+            return; // Exit early as specificPdf.save was called
           }
           pdf.save(`scanned-document-all-${timestamp}.pdf`);
           toast({ title: "Success", description: `All ${totalPages} pages saved as PDF.` });
@@ -126,14 +174,14 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
             setIsSaving(false);
             return;
           }
-          const imgData = canvas.toDataURL("image/jpeg", 0.9); 
-          const pdf = new jsPDF({
+          const imgData = canvas.toDataURL("image/jpeg", 0.9);
+          const singlePagePdf = new jsPDF({
             orientation: canvas.width > canvas.height ? "landscape" : "portrait",
             unit: "px",
             format: [canvas.width, canvas.height],
           });
-          pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
-          pdf.save(`scanned-document-page-${currentImageIndex + 1}-${timestamp}.pdf`);
+          singlePagePdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height);
+          singlePagePdf.save(`scanned-document-page-${currentImageIndex + 1}-${timestamp}.pdf`);
           toast({ title: "Success", description: `${currentVisiblePageInfo} saved as PDF (with filters).` });
         }
       } else if (format === "JPG" || format === "PNG") { // Save current page as JPG/PNG (respecting filters)
@@ -144,8 +192,8 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
         }
         const imageFormat = format === "JPG" ? "image/jpeg" : "image/png";
         const fileExtension = format === "JPG" ? "jpg" : "png";
-        const imgData = canvas.toDataURL(imageFormat, format === "JPG" ? 0.9 : undefined); 
-        
+        const imgData = canvas.toDataURL(imageFormat, format === "JPG" ? 0.9 : undefined);
+
         const link = document.createElement("a");
         link.href = imgData;
         link.download = `scanned-document-page-${currentImageIndex + 1}-${timestamp}.${fileExtension}`;
@@ -159,11 +207,11 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
       toast({
         variant: "destructive",
         title: "Save Error",
-        description: `Failed to save as ${format}.`,
+        description: `Failed to save as ${format}. Please try again.`,
       });
     } finally {
       setIsSaving(false);
-      onClose();
+      onClose(); // Close modal after saving attempt, success or fail.
     }
   };
 
@@ -171,27 +219,48 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !isSaving && onClose()}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-headline">{totalPages > 1 ? "Save Document" : "Save Current Page"}</DialogTitle>
           <DialogDescription>
-            {totalPages > 1 
-              ? `Save all ${totalPages} pages as a single PDF, or save the current page (${currentImageIndex + 1}) in other formats. Filters applied to the current view are included for JPG/PNG and single-page PDF.`
+            {totalPages > 1
+              ? `Save all ${totalPages} pages as a single PDF. You can select a paper size. For JPG/PNG, only the current page (${currentImageIndex + 1}) will be saved. Filters applied to the current view are included for JPG/PNG and single-page PDF.`
               : `Choose a format to save ${currentVisiblePageInfo}. Applied filters will be included.`
             }
           </DialogDescription>
         </DialogHeader>
+
+        {totalPages > 1 && (
+          <div className="grid gap-2 py-3">
+            <Label htmlFor="paper-size-select">Paper Size for Multi-Page PDF:</Label>
+            <Select
+              value={selectedPaperSize}
+              onValueChange={(value: string) => setSelectedPaperSize(value as PaperSizeKey)}
+              disabled={isSaving}
+            >
+              <SelectTrigger id="paper-size-select" className="w-full">
+                <SelectValue placeholder="Select paper size" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(PAPER_SIZES).map(([key, { label }]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="grid gap-4 py-4">
           <Button onClick={() => handleSave("PDF")} variant="default" disabled={isSaving || totalPages === 0}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
             {pdfButtonText}
           </Button>
           <Button onClick={() => handleSave("JPG")} variant="outline" disabled={isSaving || totalPages === 0}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Save Current Page as JPG
           </Button>
           <Button onClick={() => handleSave("PNG")} variant="outline" disabled={isSaving || totalPages === 0}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Save Current Page as PNG
           </Button>
         </div>
@@ -204,5 +273,5 @@ export function SaveModal({ isOpen, onClose, scannedImages, currentImageIndex, t
     </Dialog>
   );
 }
-
+    
     
